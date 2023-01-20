@@ -19,12 +19,12 @@ let heightSegments = 1;
 let widthLimit = 13;
 let heightLimit = 2;
 
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antiailas: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
-camera.position.set(12, 2, 5);
+camera.position.set(12, 2, 25);
 
 // create an AudioListener and add it to the camera
 const listener = new THREE.AudioListener();
@@ -56,17 +56,19 @@ function loadAudio() {
 
 const dataArray = loadAudio();
 let clicked = false;
-document.addEventListener('click', () => {
-  if (!clicked) {
-    sound.play();
-    clicked = true;
-  } else {
-    sound.pause();
-    clicked = false;
-  }
+document.addEventListener('click', (e) => {
+  console.log(e.clientX, e.clientY, screen.height);
+  if (e.clientX >= screen.height * 0.95)
+    if (!clicked) {
+      sound.play();
+      clicked = true;
+    } else {
+      sound.pause();
+      clicked = false;
+    }
 });
 
-function makeSquares(num, side) {
+function makeSquares(num, side, rotationConst) {
   const square = new THREE.Shape();
   square.moveTo(num, num);
   square.lineTo(num, -num);
@@ -81,7 +83,7 @@ function makeSquares(num, side) {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const rotationConst = 2.3558;
+
   const squareMesh = new THREE.Mesh(geometry, material);
   if (side === 'right' || side === 'left') {
     squareMesh.position.x = 0;
@@ -93,7 +95,7 @@ function makeSquares(num, side) {
     squareMesh.position.y = num;
     squareMesh.position.z = 0;
     squareMesh.rotation.x = num * rotationConst;
-    console.log(squareMesh.rotation);
+    //console.log(squareMesh.rotation);
   }
 
   if (side === 'front' || side === 'back') {
@@ -106,26 +108,40 @@ function makeSquares(num, side) {
   return squareMesh;
 }
 
-// keep track of faces
-const squareFaces = {
-  topSquare: null,
-  bottomSquare: null,
-  leftSide: null,
-  rightSide: null,
-  frontSquare: null,
-  backSquare: null,
-};
+function squaresObj(faceNum, rotation) {
+  // keep track of faces
+  const squareFaces = {
+    topSquare: null,
+    bottomSquare: null,
+    leftSide: null,
+    rightSide: null,
+    frontSquare: null,
+    backSquare: null,
+  };
+
+  squareFaces.rightSide = makeSquares(faceNum, 'right', rotation);
+  squareFaces.leftSide = makeSquares(-faceNum, 'left', rotation);
+
+  squareFaces.topSquare = makeSquares(faceNum, 'top', rotation);
+  squareFaces.bottomSquare = makeSquares(-faceNum, 'bottom', rotation);
+
+  squareFaces.frontSquare = makeSquares(faceNum, 'front', rotation);
+  squareFaces.backSquare = makeSquares(-faceNum, 'back', rotation);
+
+  return squareFaces;
+}
 
 // don't change this unless u want to fuck up everything
 const faceNum = 6;
-squareFaces.rightSide = makeSquares(faceNum, 'right');
-squareFaces.leftSide = makeSquares(-faceNum, 'left');
+const sixRotation = 2.3558;
 
-squareFaces.topSquare = makeSquares(faceNum, 'top');
-squareFaces.bottomSquare = makeSquares(-faceNum, 'bottom');
+const square_6 = squaresObj(faceNum, sixRotation);
 
-squareFaces.frontSquare = makeSquares(faceNum, 'front');
-squareFaces.backSquare = makeSquares(-faceNum, 'back');
+// make BIGGER SQUARES
+// 10 0.157
+// 11 0.142
+// 12 0.132
+const square_10 = squaresObj(12, 0.131);
 
 const shapeArr = [];
 
@@ -140,18 +156,23 @@ function makeSphere(width, height) {
   return sphere;
 }
 
-let pushed = true;
+function makeFloor(num = 100) {
+  var planeGeometry = new THREE.PlaneGeometry(screen.width, 800, 30, 30);
+  var planeMaterial = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    // side: THREE.DoubleSide,
+    wireframe: true,
+  });
 
-function pushToShapeArr() {
-  if (!pushed) {
-    for (let i = widthSegments; i <= widthLimit; i++) {
-      for (let e = heightSegments; e <= heightLimit; e++) {
-        shapeArr.push(makeSphere(i, e));
-      }
-    }
-    pushed = true;
-  }
+  var plane = new THREE.Mesh(planeGeometry, planeMaterial);
+  plane.rotation.x = -0.5 * Math.PI;
+  plane.position.set(0, -65, 0);
+  scene.add(plane);
 }
+
+// makeFloor();
+
+let pushed = true;
 
 function renderShape(index) {
   if (pushed) {
@@ -166,22 +187,16 @@ function renderShape(index) {
   }
 }
 
-//pushToShapeArr();
-// console.log(shapeArr.length);
-let ind = 0;
-
 const geometry = new THREE.SphereGeometry(5, 2, 3);
-const material = new THREE.MeshNormalMaterial({ wireframe: true });
+const material = new THREE.MeshNormalMaterial({ wireframe: false });
 const sphere = new THREE.Mesh(geometry, material);
 scene.add(sphere);
-console.log(THREE);
-// const outerGeo = new THREE.BoxGeometry(7, 4, 5);
-// const materialGeo = new THREE.MeshNormalMaterial({ wireframe: true });
-// const box = new THREE.Mesh(materialGeo, outerGeo);
-// scene.add(box);
+//console.log(THREE);
 
 controls.autoRotate = true;
-console.log(scene.children);
+//console.log(scene.children);
+const childrenLengthOnInit = scene.children.length;
+
 function animate() {
   requestAnimationFrame(animate);
 
@@ -189,7 +204,8 @@ function animate() {
   const avgFreq = analyser.getAverageFrequency(dataArray);
   if ((clicked && pushed) || avgFreq > 0) {
     makeRoughShape(sphere, avgFreq);
-    changeBorderBox(squareFaces, avgFreq);
+    changeBorderBox(square_6, avgFreq, 70);
+    changeBorderBox(square_10, avgFreq, 60, true);
   }
   controls.update();
   renderer.render(scene, camera);
@@ -201,7 +217,7 @@ function makeRoughShape(mesh, fr) {
     if (clicked) {
       if (normalizedFR > 0) {
         var offset = mesh.geometry.parameters.radius;
-        var amp = 1.2;
+        var amp = 1.8;
         var time = window.performance.now();
         var rf = 0.00004;
         vertex.normalize();
@@ -225,11 +241,17 @@ function makeRoughShape(mesh, fr) {
   mesh.geometry.computeFaceNormals();
 }
 
-function changeBorderBox(shapeObj, num) {
+function changeBorderBox(shapeObj, num, lim, constraint) {
   // iterate thru object and remove items at random from the scene then re-add them at the top of this function
   //mesh.geometry.verticesNeedUpdate = true;
-
-  if (scene.children.length < 3) {
+  const activeShapeCount = scene.children.reduce((count, shape) => {
+    if (Object.values(shapeObj).some((e) => e.uuid === shape.uuid)) {
+      count += 1;
+    }
+    return count;
+  }, 0);
+  // console.log(activeShapeCount);
+  if (activeShapeCount < 2) {
     for (const shape in shapeObj) {
       if (!scene.children.some((gs) => gs.uuid === shape.uuid)) {
         scene.add(shapeObj[shape]);
@@ -241,12 +263,16 @@ function changeBorderBox(shapeObj, num) {
     var keys = Object.keys(obj);
     return obj[keys[(keys.length * Math.random()) << 0]];
   };
-  const ranNum = Math.round(Math.random() * 2);
-  const ind = Math.round(Math.random() * Object.keys(shapeObj).length - 1);
   const rand = randomProperty(shapeObj);
 
-  if (num > 70) {
-    scene.remove(rand);
+  if (constraint) {
+    if (num > lim && num < lim + 5) {
+      scene.remove(rand);
+    }
+  } else {
+    if (num > lim) {
+      scene.remove(rand);
+    }
   }
 }
 
